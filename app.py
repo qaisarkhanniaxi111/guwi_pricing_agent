@@ -153,7 +153,6 @@ def predict():
         predicted_price = model.predict(df)
         
         # Calculate confidence interval (simplified approach)
-        # In production, you might want to use more sophisticated methods
         price_std = predicted_price * 0.1  # 10% standard deviation
         confidence_interval = {
             'low': max(predicted_price - 1.96 * price_std, 50),  # Minimum $50
@@ -327,8 +326,13 @@ def internal_error(error):
 if __name__ == '__main__':
     # Load the model on startup
     if load_model():
+        # Get port from environment variable (for deployment) or default to 5000
+        port = int(os.environ.get('PORT', 5000))
+        # Set debug based on environment
+        debug_mode = os.environ.get('FLASK_ENV', 'production') != 'production'
+        
         # Run the Flask app
-        app.run(host='0.0.0.0', port=5000, debug=True)
+        app.run(host='0.0.0.0', port=port, debug=debug_mode)
     else:
         logger.error("Failed to load model. Please train the model first.")
         sys.exit(1)
