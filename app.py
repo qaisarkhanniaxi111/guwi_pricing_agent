@@ -1,26 +1,25 @@
 """
-Flask API for Gutter Clearing Price Prediction
-This API provides endpoints for predicting gutter clearing prices
-and getting model information.
+Multi-Service Price Prediction API
+Supports: Gutter Clearing, Chemical Spray, Zinc Treatment, 
+Exterior Window Cleaning, Interior Window Cleaning
 """
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import pandas as pd
 import numpy as np
-import joblib
 import logging
 from datetime import datetime
 import os
 import sys
 
-# Add the current directory to path to import the model
+# Add the current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from gutter_price_model import GutterPricePredictor
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
 # Configure logging
 logging.basicConfig(
@@ -29,109 +28,156 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global variable for the model
-model = None
+# Service configurations
+SERVICES = {
+    'gutter_clearing': {
+        'model_file': 'gutter_price_model.pkl',
+        'description': 'Gutter Clearing Service',
+        'model': None
+    },
+    'chemical_spray': {
+        'model_file': 'chemical_spray_model.pkl',
+        'description': 'Chemical Spray Service',
+        'model': None
+    },
+    'zinc_treatment': {
+        'model_file': 'zinc_treatment_model.pkl',
+        'description': 'Zinc Treatment Service',
+        'model': None
+    },
+    'exterior_window': {
+        'model_file': 'exterior_window_model.pkl',
+        'description': 'Exterior Window Cleaning Service',
+        'model': None
+    },
+    'interior_window': {
+        'model_file': 'interior_window_model.pkl',
+        'description': 'Interior Window Cleaning Service',
+        'model': None
+    }
+}
 
-def load_model():
-    """Load the trained model"""
-    global model
-    try:
-        model = GutterPricePredictor()
-        model.load_model('gutter_price_model.pkl')
-        logger.info("Model loaded successfully")
-        return True
-    except Exception as e:
-        logger.error(f"Error loading model: {str(e)}")
-        return False
+
+def load_all_models():
+    """Load all available service models"""
+    loaded_count = 0
+    
+    for service_name, config in SERVICES.items():
+        model_file = config['model_file']
+        
+        if os.path.exists(model_file):
+            try:
+                predictor = GutterPricePredictor()
+                predictor.load_model(model_file)
+                config['model'] = predictor
+                loaded_count += 1
+                logger.info(f"Loaded {config['description']} model")
+            except Exception as e:
+                logger.error(f"Failed to load {service_name}: {e}")
+        else:
+            logger.warning(f"Model file not found: {model_file}")
+    
+    logger.info(f"Loaded {loaded_count}/{len(SERVICES)} models")
+    return loaded_count
+
 
 @app.route('/', methods=['GET'])
 def home():
-    """Home endpoint with API information"""
+    """API information"""
+    available_services = [
+        {
+            'service': name,
+            'description': config['description'],
+            'available': config['model'] is not None
+        }
+        for name, config in SERVICES.items()
+    ]
+    
     return jsonify({
-        'message': 'Gutter Clearing Price Prediction API',
-        'version': '1.0.0',
+        'message': 'Multi-Service Price Prediction API',
+        'version': '2.0.0',
+        'services': available_services,
         'endpoints': {
             '/': 'API information',
             '/health': 'Health check',
-            '/predict': 'Predict gutter clearing price (POST)',
-            '/predict_batch': 'Predict prices for multiple properties (POST)',
-            '/model_info': 'Get model information',
-            '/features': 'Get required features list'
+            '/services': 'List available services',
+            '/predict/<service>': 'Predict price for a service (POST)',
+            '/predict_batch/<service>': 'Batch predictions (POST)',
+            '/predict_all': 'Get prices for all services (POST)',
+            '/model_info/<service>': 'Get model information'
         }
     })
 
+
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+    """Health check"""
+    loaded_services = sum(1 for config in SERVICES.values() if config['model'] is not None)
+    
     return jsonify({
         'status': 'healthy',
-        'model_loaded': model is not None,
+        'models_loaded': f"{loaded_services}/{len(SERVICES)}",
         'timestamp': datetime.now().isoformat()
     })
 
-@app.route('/features', methods=['GET'])
-def get_features():
-    """Get the list of required features"""
-    required_features = {
-        'required': [
-            'Roof Type',
-            'Home Square Footage',
-            'Home Value',
-            'Average Home value in Zip code',
-            'Number of Stories'
-        ],
-        'optional': [
-            'Address',
-            'City',
-            'State',
-            'Zip',
-            'Roof Details >> Roof: >> Steepness',
-            'Jobsite Ladders >> Roof >> Number of Ladder Movements',
-            'Jobsite Ladders >> Roof >> ladder Size',
-            'Jobsite Ladders >> Gutter >> Number of Ladder Movements',
-            'Jobsite Ladders >> Gutter >> ladder Size',
-            'Jobsite Ladders >> Window >> Number of Ladder Movements',
-            'Jobsite Ladders >> Window >> ladder Size'
-        ],
-        'roof_types': ['Composition', 'Tile', 'Metal', 'Slate', 'Wood'],
-        'example_steepness': '10 / 12',
-        'example_ladder_movements': '4 - 8 or 20+',
-        'example_ladder_size': '40ft'
-    }
-    return jsonify(required_features)
 
-@app.route('/predict', methods=['POST'])
-def predict():
-    """Predict gutter clearing price for a single property"""
+@app.route('/services', methods=['GET'])
+def list_services():
+    """List all available services"""
+    services_list = []
+    
+    for name, config in SERVICES.items():
+        service_info = {
+            'service': name,
+            'description': config['description'],
+            'available': config['model'] is not None,
+            'endpoint': f'/predict/{name}'
+        }
+        services_list.append(service_info)
+    
+    return jsonify({
+        'services': services_list,
+        'total': len(services_list),
+        'available': sum(1 for s in services_list if s['available'])
+    })
+
+
+@app.route('/predict/<service>', methods=['POST'])
+def predict(service):
+    """Predict price for a specific service"""
+    
+    # Validate service
+    if service not in SERVICES:
+        return jsonify({
+            'error': f'Unknown service: {service}',
+            'available_services': list(SERVICES.keys())
+        }), 400
+    
+    # Check if model is loaded
+    if SERVICES[service]['model'] is None:
+        return jsonify({
+            'error': f'Model not available for {service}',
+            'message': 'Model file not found or failed to load'
+        }), 503
+    
     try:
-        # Get JSON data from request
+        # Get JSON data
         data = request.json
         
         if not data:
             return jsonify({'error': 'No data provided'}), 400
         
-        # Validate required fields
-        required_fields = [
-            'Roof Type',
-            'Home Square Footage',
-            'Home Value',
-            'Average Home value in Zip code',
-            'Number of Stories'
-        ]
-        
-        missing_fields = [field for field in required_fields if field not in data]
-        if missing_fields:
-            return jsonify({
-                'error': 'Missing required fields',
-                'missing_fields': missing_fields
-            }), 400
-        
-        # Set default values for optional fields
+        # Set defaults for optional fields
         defaults = {
             'Address': 'Unknown',
             'City': 'Unknown',
             'State': 'Unknown',
             'Zip': '00000',
+            'Roof Type': 'Composition',
+            'Home Square Footage': 1500,
+            'Home Value': 1400,
+            'Average Home value in Zip code': 1600,
+            'Number of Stories': 1,
             'Roof Details >> Roof: >> Steepness': '6 / 12',
             'Jobsite Ladders >> Roof >> Number of Ladder Movements': '4 - 8',
             'Jobsite Ladders >> Roof >> ladder Size': '32ft',
@@ -141,7 +187,7 @@ def predict():
             'Jobsite Ladders >> Window >> ladder Size': '32ft'
         }
         
-        # Apply defaults for missing optional fields
+        # Apply defaults
         for field, default_value in defaults.items():
             if field not in data:
                 data[field] = default_value
@@ -150,189 +196,184 @@ def predict():
         df = pd.DataFrame([data])
         
         # Make prediction
+        model = SERVICES[service]['model']
         predicted_price = model.predict(df)
         
-        # Calculate confidence interval (simplified approach)
-        price_std = predicted_price * 0.1  # 10% standard deviation
-        confidence_interval = {
-            'low': max(predicted_price - 1.96 * price_std, 50),  # Minimum $50
-            'high': predicted_price + 1.96 * price_std
-        }
+        # Calculate confidence based on price range
+        confidence = 'high' if predicted_price < 600 else 'medium'
+        if predicted_price > 800:
+            confidence = 'low - manual review recommended'
         
         # Prepare response
         response = {
+            'service': service,
+            'description': SERVICES[service]['description'],
             'predicted_price': float(predicted_price),
             'formatted_price': f"${predicted_price:.2f}",
-            'confidence_interval': {
-                'low': float(confidence_interval['low']),
-                'high': float(confidence_interval['high']),
-                'formatted': f"${confidence_interval['low']:.2f} - ${confidence_interval['high']:.2f}"
-            },
-            'factors': {
-                'home_size': data['Home Square Footage'],
-                'stories': data['Number of Stories'],
-                'roof_type': data['Roof Type'],
-                'area_value_ratio': float(data['Home Value'] / data['Average Home value in Zip code'])
-            },
+            'confidence': confidence,
+            'model': model.best_model_name if hasattr(model, 'best_model_name') else 'Unknown',
             'timestamp': datetime.now().isoformat()
         }
         
-        # Log prediction
-        logger.info(f"Prediction made: ${predicted_price:.2f} for {data.get('Address', 'Unknown')}")
+        logger.info(f"Prediction for {service}: ${predicted_price:.2f}")
         
         return jsonify(response)
     
     except Exception as e:
-        logger.error(f"Error in prediction: {str(e)}")
+        logger.error(f"Error in prediction for {service}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/predict_batch', methods=['POST'])
-def predict_batch():
-    """Predict gutter clearing prices for multiple properties"""
+
+@app.route('/predict_all', methods=['POST'])
+def predict_all():
+    """Get price predictions for all available services"""
+    
     try:
-        # Get JSON data from request
+        # Get JSON data
         data = request.json
         
-        if not data or 'properties' not in data:
-            return jsonify({'error': 'No properties data provided'}), 400
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
         
-        properties = data['properties']
+        predictions = {}
+        total_price = 0
         
-        if not isinstance(properties, list):
-            return jsonify({'error': 'Properties must be a list'}), 400
+        # Get predictions from all available models
+        for service_name, config in SERVICES.items():
+            if config['model'] is not None:
+                try:
+                    # Set defaults
+                    defaults = {
+                        'Address': 'Unknown',
+                        'City': 'Unknown',
+                        'State': 'Unknown',
+                        'Zip': '00000',
+                        'Roof Type': 'Composition',
+                        'Home Square Footage': 1500,
+                        'Home Value': 1400,
+                        'Average Home value in Zip code': 1600,
+                        'Number of Stories': 1,
+                        'Roof Details >> Roof: >> Steepness': '6 / 12',
+                        'Jobsite Ladders >> Roof >> Number of Ladder Movements': '4 - 8',
+                        'Jobsite Ladders >> Roof >> ladder Size': '32ft',
+                        'Jobsite Ladders >> Gutter >> Number of Ladder Movements': '9 - 20',
+                        'Jobsite Ladders >> Gutter >> ladder Size': '32ft',
+                        'Jobsite Ladders >> Window >> Number of Ladder Movements': '9 - 20',
+                        'Jobsite Ladders >> Window >> ladder Size': '32ft'
+                    }
+                    
+                    data_copy = data.copy()
+                    for field, default_value in defaults.items():
+                        if field not in data_copy:
+                            data_copy[field] = default_value
+                    
+                    df = pd.DataFrame([data_copy])
+                    predicted_price = config['model'].predict(df)
+                    
+                    predictions[service_name] = {
+                        'description': config['description'],
+                        'price': float(predicted_price),
+                        'formatted': f"${predicted_price:.2f}"
+                    }
+                    
+                    total_price += predicted_price
+                    
+                except Exception as e:
+                    predictions[service_name] = {
+                        'error': str(e)
+                    }
         
-        results = []
-        
-        for idx, property_data in enumerate(properties):
-            try:
-                # Validate required fields
-                required_fields = [
-                    'Roof Type',
-                    'Home Square Footage',
-                    'Home Value',
-                    'Average Home value in Zip code',
-                    'Number of Stories'
-                ]
-                
-                missing_fields = [field for field in required_fields if field not in property_data]
-                if missing_fields:
-                    results.append({
-                        'index': idx,
-                        'error': f'Missing required fields: {missing_fields}',
-                        'address': property_data.get('Address', 'Unknown')
-                    })
-                    continue
-                
-                # Set default values for optional fields
-                defaults = {
-                    'Address': f'Property {idx + 1}',
-                    'City': 'Unknown',
-                    'State': 'Unknown',
-                    'Zip': '00000',
-                    'Roof Details >> Roof: >> Steepness': '6 / 12',
-                    'Jobsite Ladders >> Roof >> Number of Ladder Movements': '4 - 8',
-                    'Jobsite Ladders >> Roof >> ladder Size': '32ft',
-                    'Jobsite Ladders >> Gutter >> Number of Ladder Movements': '9 - 20',
-                    'Jobsite Ladders >> Gutter >> ladder Size': '32ft',
-                    'Jobsite Ladders >> Window >> Number of Ladder Movements': '9 - 20',
-                    'Jobsite Ladders >> Window >> ladder Size': '32ft'
-                }
-                
-                # Apply defaults for missing optional fields
-                for field, default_value in defaults.items():
-                    if field not in property_data:
-                        property_data[field] = default_value
-                
-                # Create DataFrame
-                df = pd.DataFrame([property_data])
-                
-                # Make prediction
-                predicted_price = model.predict(df)
-                
-                results.append({
-                    'index': idx,
-                    'address': property_data.get('Address', f'Property {idx + 1}'),
-                    'predicted_price': float(predicted_price),
-                    'formatted_price': f"${predicted_price:.2f}"
-                })
-            
-            except Exception as e:
-                results.append({
-                    'index': idx,
-                    'error': str(e),
-                    'address': property_data.get('Address', f'Property {idx + 1}')
-                })
-        
-        # Calculate summary statistics
-        successful_predictions = [r['predicted_price'] for r in results if 'predicted_price' in r]
-        
-        summary = {
-            'total_properties': len(properties),
-            'successful_predictions': len(successful_predictions),
-            'failed_predictions': len(properties) - len(successful_predictions)
-        }
-        
-        if successful_predictions:
-            summary.update({
-                'average_price': float(np.mean(successful_predictions)),
-                'min_price': float(np.min(successful_predictions)),
-                'max_price': float(np.max(successful_predictions)),
-                'total_estimated_revenue': float(np.sum(successful_predictions))
-            })
+        # Calculate bundle discount (10% off if getting all services)
+        bundle_discount = total_price * 0.10 if len(predictions) >= 3 else 0
+        bundle_price = total_price - bundle_discount
         
         response = {
-            'results': results,
-            'summary': summary,
+            'predictions': predictions,
+            'summary': {
+                'total_individual': float(total_price),
+                'bundle_discount': float(bundle_discount),
+                'bundle_price': float(bundle_price),
+                'formatted_total': f"${total_price:.2f}",
+                'formatted_bundle': f"${bundle_price:.2f}"
+            },
+            'property': {
+                'address': data.get('Address', 'Unknown'),
+                'city': data.get('City', 'Unknown'),
+                'state': data.get('State', 'Unknown')
+            },
             'timestamp': datetime.now().isoformat()
         }
         
         return jsonify(response)
     
     except Exception as e:
-        logger.error(f"Error in batch prediction: {str(e)}")
+        logger.error(f"Error in predict_all: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/model_info', methods=['GET'])
-def model_info():
-    """Get information about the loaded model"""
+
+@app.route('/model_info/<service>', methods=['GET'])
+def model_info(service):
+    """Get information about a specific service model"""
+    
+    if service not in SERVICES:
+        return jsonify({
+            'error': f'Unknown service: {service}',
+            'available_services': list(SERVICES.keys())
+        }), 400
+    
+    if SERVICES[service]['model'] is None:
+        return jsonify({
+            'error': f'Model not available for {service}'
+        }), 503
+    
     try:
-        if model is None:
-            return jsonify({'error': 'Model not loaded'}), 500
+        model = SERVICES[service]['model']
         
         info = {
+            'service': service,
+            'description': SERVICES[service]['description'],
             'model_type': model.best_model_name if hasattr(model, 'best_model_name') else 'Unknown',
             'features_used': model.feature_names if hasattr(model, 'feature_names') else [],
-            'metrics': model.model_metrics if hasattr(model, 'model_metrics') else {},
-            'status': 'active',
-            'timestamp': datetime.now().isoformat()
+            'metrics': model.model_metrics.get(model.best_model_name, {}) if hasattr(model, 'model_metrics') else {},
+            'status': 'active'
         }
         
         return jsonify(info)
     
     except Exception as e:
-        logger.error(f"Error getting model info: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors"""
     return jsonify({'error': 'Endpoint not found'}), 404
+
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Handle 500 errors"""
     return jsonify({'error': 'Internal server error'}), 500
 
+
 if __name__ == '__main__':
-    # Load the model on startup
-    if load_model():
-        # Get port from environment variable (for deployment) or default to 5000
-        port = int(os.environ.get('PORT', 5000))
-        # Set debug based on environment
-        debug_mode = os.environ.get('FLASK_ENV', 'production') != 'production'
-        
-        # Run the Flask app
-        app.run(host='0.0.0.0', port=port, debug=debug_mode)
-    else:
-        logger.error("Failed to load model. Please train the model first.")
+    # Load all models on startup
+    loaded = load_all_models()
+    
+    if loaded == 0:
+        logger.error("No models loaded! Please train models first.")
+        print("\n❌ ERROR: No models found!")
+        print("Please run: python train_all_services.py")
         sys.exit(1)
+    
+    # Get port from environment
+    port = int(os.environ.get('PORT', 8080))
+    debug_mode = os.environ.get('FLASK_ENV', 'production') != 'production'
+    
+    print(f"\n{'='*70}")
+    print(f"Multi-Service Price Prediction API")
+    print(f"{'='*70}")
+    print(f"Loaded {loaded}/{len(SERVICES)} models")
+    print(f"Starting on port {port}")
+    print(f"{'='*70}\n")
+    
+    # Run the Flask app
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
