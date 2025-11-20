@@ -1,0 +1,82 @@
+[
+  {
+    "service": "gutter_clearing",
+    "description": "Gutter Clearing Service",
+    "model_file": "gutter_price_model.pkl",
+    "best_model": "XGBoost",
+    "training_samples": 5099,
+    "mae": 33.55539321899414,
+    "rmse": 50.88119011788639,
+    "r2": 0.6542277336120605,
+    "cv_mae": 34.73844833374024,
+    "price_range": {
+      "min": 205.0,
+      "max": 1525.0,
+      "mean": 316.1496371837615
+    }
+  },
+  {
+    "service": "chemical_spray",
+    "description": "Chemical Spray Service",
+    "model_file": "chemical_spray_model.pkl",
+    "best_model": "Random Forest",
+    "training_samples": 4199,
+    "mae": 16.002713429871267,
+    "rmse": 26.629158818124097,
+    "r2": 0.5009668398848882,
+    "cv_mae": 16.537995233342883,
+    "price_range": {
+      "min": 100.0,
+      "max": 825.0,
+      "mean": 185.52750654917838
+    }
+  },
+  {
+    "service": "zinc_treatment",
+    "description": "Zinc Treatment Service",
+    "model_file": "zinc_treatment_model.pkl",
+    "best_model": "Extra Trees",
+    "training_samples": 4199,
+    "mae": 15.277380825321801,
+    "rmse": 23.81349745583437,
+    "r2": 0.430821286682993,
+    "cv_mae": 15.916169305192616,
+    "price_range": {
+      "min": 100.0,
+      "max": 590.0,
+      "mean": 165.65944272445822
+    }
+  },
+  {
+    "service": "exterior_window",
+    "description": "Exterior Window Cleaning Service",
+    "model_file": "exterior_window_model.pkl",
+    "best_model": "Gradient Boosting",
+    "training_samples": 5299,
+    "mae": 49.0215732465029,
+    "rmse": 82.65859345115395,
+    "r2": 0.7164883225966923,
+    "cv_mae": 56.21397868520696,
+    "price_range": {
+      "min": 20.0,
+      "max": 3265.0,
+      "mean": 323.76335157576904
+    }
+  },
+  {
+    "service": "interior_window",
+    "description": "Interior Window Cleaning Service",
+    "model_file": "interior_window_model.pkl",
+    "best_model": "Extra Trees",
+    "training_samples": 4799,
+    "mae": 41.49923159378626,
+    "rmse": 65.91152318741028,
+    "r2": 0.6575220485141899,
+    "cv_mae": 42.802074098562976,
+    "price_range": {
+      "min": 20.0,
+      "max": 2040.0,
+      "mean": 243.5148989372786
+    }
+  }
+]
