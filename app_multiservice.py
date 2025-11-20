@@ -365,7 +365,7 @@ if __name__ == '__main__':
         sys.exit(1)
     
     # Get port from environment
-    port = int(os.environ.get('PORT', 5000))
+    port = int(os.environ.get('PORT', 8080))
     debug_mode = os.environ.get('FLASK_ENV', 'production') != 'production'
     
     print(f"\n{'='*70}")
