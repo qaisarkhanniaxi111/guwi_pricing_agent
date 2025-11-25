@@ -7,6 +7,7 @@ Exterior Window Cleaning, Interior Window Cleaning
 import pandas as pd
 import numpy as np
 from gutter_price_model import GutterPricePredictor
+from flexible_trainer import FlexibleServicePredictor, train_service_model_flexible
 import os
 import json
 
@@ -16,31 +17,44 @@ SERVICES = {
         'csv_file': 'train2_fix.csv',
         'price_column': 'Gutter Clearing',
         'model_file': 'gutter_price_model.pkl',
-        'description': 'Gutter Clearing Service'
+        'description': 'Gutter Clearing Service',
+        'required_columns': None  # Uses all standard columns
     },
     'chemical_spray': {
         'csv_file': 'chemicaltrain.csv',
         'price_column': 'Chemical Spray',
         'model_file': 'chemical_spray_model.pkl',
-        'description': 'Chemical Spray Service'
+        'description': 'Chemical Spray Service',
+        'required_columns': None  # Uses all standard columns
     },
     'zinc_treatment': {
         'csv_file': 'zinctrain.csv',
         'price_column': 'Zinc Treatment',
         'model_file': 'zinc_treatment_model.pkl',
-        'description': 'Zinc Treatment Service'
+        'description': 'Zinc Treatment Service',
+        'required_columns': None  # Uses all standard columns
     },
     'exterior_window': {
         'csv_file': 'exteriorwindowtrain.csv',
         'price_column': 'Exterior Window Cleaning',
         'model_file': 'exterior_window_model.pkl',
-        'description': 'Exterior Window Cleaning Service'
+        'description': 'Exterior Window Cleaning Service',
+        'required_columns': [
+            'Address', 'City', 'State', 'Zip',
+            'Home Square Footage', 'Home Value', 
+            'Average Home Value in Zip code', 'Number of Stories',
+            'Jobsite Ladders >>Gutter>>Number of Ladder Movements',
+            'Jobsite Ladders >> Gutter >> ladder Size',
+            'Jobsite Ladders >> Window >> Number of Ladder Movements',
+            'Jobsite Ladders >> Window >> ladder Size'
+        ]
     },
     'interior_window': {
         'csv_file': 'interiorwindowtrain.csv',
         'price_column': 'Interior Window Cleaning',
         'model_file': 'interior_window_model.pkl',
-        'description': 'Interior Window Cleaning Service'
+        'description': 'Interior Window Cleaning Service',
+        'required_columns': None  # Uses all standard columns
     }
 }
 
@@ -89,6 +103,26 @@ def train_service_model(service_name, config):
         # Rename price column to standard name for model
         df_renamed = df.copy()
         df_renamed['Gutter Clearing'] = df_renamed[price_column]
+        
+        # If service has specific required columns, keep only those
+        required_cols = config.get('required_columns', None)
+        if required_cols is not None:
+            print(f"   ℹ️  Service uses custom column set ({len(required_cols)} columns)")
+            
+            # Keep only the required columns that exist
+            available_required = [col for col in required_cols if col in df_renamed.columns]
+            missing_required = [col for col in required_cols if col not in df_renamed.columns]
+            
+            if missing_required:
+                print(f"   ⚠️  Some required columns missing: {missing_required}")
+            
+            # Keep required columns + the price column
+            columns_to_keep = available_required + ['Gutter Clearing']
+            df_renamed = df_renamed[columns_to_keep]
+            
+            print(f"   ✅ Using {len(available_required)} feature columns")
+        else:
+            print(f"   ℹ️  Service uses all available columns")
         
         # Remove rows with missing prices
         initial_count = len(df_renamed)
@@ -173,7 +207,12 @@ def train_all_services():
     failed = 0
     
     for service_name, config in SERVICES.items():
-        result = train_service_model(service_name, config)
+        # Use flexible trainer for services with custom columns
+        if config.get('required_columns') is not None:
+            print(f"\n[Using Flexible Trainer for {service_name}]")
+            result = train_service_model_flexible(service_name, config)
+        else:
+            result = train_service_model(service_name, config)
         
         if result:
             results.append(result)
