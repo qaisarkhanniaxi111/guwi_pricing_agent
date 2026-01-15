@@ -71,15 +71,19 @@ def load_all_models():
         
         if os.path.exists(model_file):
             try:
+                logger.info(f"Attempting to load {model_file}...")
                 predictor = GutterPricePredictor()
                 predictor.load_model(model_file)
                 config['model'] = predictor
                 loaded_count += 1
-                logger.info(f"Loaded {config['description']} model")
+                logger.info(f"✅ Successfully loaded {config['description']} model")
             except Exception as e:
-                logger.error(f"Failed to load {service_name}: {e}")
+                logger.error(f"❌ Failed to load {service_name}: {str(e)}")
+                logger.error(f"   Error type: {type(e).__name__}")
+                import traceback
+                logger.error(f"   Traceback: {traceback.format_exc()}")
         else:
-            logger.warning(f"Model file not found: {model_file}")
+            logger.warning(f"⚠️  Model file not found: {model_file}")
     
     logger.info(f"Loaded {loaded_count}/{len(SERVICES)} models")
     return loaded_count
@@ -258,6 +262,7 @@ def home():
         'endpoints': {
             '/': 'API information',
             '/health': 'Health check',
+            '/debug': 'Debug - Check files and model status',
             '/services': 'List available services',
             '/predict/<service>': 'Predict price for a service (POST)',
             '/predict_all': 'Get prices for all services (POST)',
@@ -277,6 +282,62 @@ def health_check():
         'status': 'healthy',
         'models_loaded': f"{loaded_services}/{len(SERVICES)}",
         'timestamp': datetime.now().isoformat()
+    })
+
+
+@app.route('/debug', methods=['GET'])
+def debug():
+    """Debug endpoint to check files and configuration"""
+    import os
+    
+    # Check current directory
+    current_dir = os.getcwd()
+    files_in_dir = os.listdir(current_dir)
+    
+    # Check for .pkl files
+    pkl_files = [f for f in files_in_dir if f.endswith('.pkl')]
+    
+    # Check if gutter_price_model.py exists
+    py_files = [f for f in files_in_dir if f.endswith('.py')]
+    
+    # Check model status with detailed info
+    model_status = {}
+    for service_name, config in SERVICES.items():
+        model_file = config['model_file']
+        file_exists = os.path.exists(model_file)
+        file_size = os.path.getsize(model_file) if file_exists else 0
+        
+        # Try to load model to see error
+        load_error = None
+        if file_exists and config['model'] is None:
+            try:
+                test_predictor = GutterPricePredictor()
+                test_predictor.load_model(model_file)
+                load_error = "No error - should have loaded!"
+            except Exception as e:
+                load_error = f"{type(e).__name__}: {str(e)}"
+        
+        model_status[service_name] = {
+            'model_file': model_file,
+            'exists': file_exists,
+            'size_mb': round(file_size / (1024*1024), 2) if file_exists else 0,
+            'full_path': os.path.abspath(model_file),
+            'loaded': config['model'] is not None,
+            'load_error': load_error
+        }
+    
+    return jsonify({
+        'current_directory': current_dir,
+        'total_files': len(files_in_dir),
+        'pkl_files_found': pkl_files,
+        'py_files_found': py_files,
+        'gutter_price_model_py_exists': 'gutter_price_model.py' in py_files,
+        'model_status': model_status,
+        'python_version': sys.version,
+        'environment': {
+            'PORT': os.environ.get('PORT'),
+            'RAPIDAPI_KEY': 'Set' if RAPIDAPI_KEY else 'Not set'
+        }
     })
 
 
@@ -736,26 +797,46 @@ def internal_error(error):
 
 
 if __name__ == '__main__':
+    print("\n" + "="*70)
+    print("Multi-Service Price Prediction API - Starting...")
+    print("="*70)
+    
+    # Check for required files
+    required_files = [
+        'gutter_price_model.pkl',
+        'chemical_spray_model.pkl',
+        'zinc_treatment_model.pkl',
+        'exterior_window_model.pkl',
+        'interior_window_model.pkl'
+    ]
+    
+    missing_files = []
+    for file in required_files:
+        if not os.path.exists(file):
+            missing_files.append(file)
+    
+    if missing_files:
+        print("\n⚠️  WARNING: Missing model files:")
+        for file in missing_files:
+            print(f"   ❌ {file}")
+        print("\nThe API will start but some services won't work.")
+        print("Upload .pkl files to enable all services.\n")
+    
     # Load all models on startup
     loaded = load_all_models()
     
     if loaded == 0:
-        logger.error("No models loaded! Please train models first.")
-        print("\n❌ ERROR: No models found!")
-        print("Please run: python train_all_services.py")
-        sys.exit(1)
+        logger.warning("No models loaded! API will run but predictions won't work.")
+        print("\n⚠️  No models loaded! Upload .pkl files to enable predictions.")
     
     # Get port from environment
     port = int(os.environ.get('PORT', 8080))
     debug_mode = os.environ.get('FLASK_ENV', 'production') != 'production'
     
-    print(f"\n{'='*70}")
-    print(f"Multi-Service Price Prediction API")
-    print(f"{'='*70}")
-    print(f"Loaded {loaded}/{len(SERVICES)} models")
+    print(f"\nLoaded {loaded}/{len(SERVICES)} models")
     print(f"Starting on port {port}")
     print(f"Using MINIMAL 5-column approach")
-    print(f"{'='*70}\n")
+    print("="*70 + "\n")
     
     # Run the Flask app
     app.run(host='0.0.0.0', port=port, debug=debug_mode)
