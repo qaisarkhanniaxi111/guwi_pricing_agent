@@ -25,7 +25,7 @@ os.environ['PORT'] = str(port)
 # Now run the app
 if __name__ == '__main__':
     # Import and run the Flask app
-    from app import app, load_model
+    from app_manual import app, load_model
     
     if load_model():
         app.run(host='0.0.0.0', port=port, debug=False)

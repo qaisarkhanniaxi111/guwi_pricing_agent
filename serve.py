@@ -6,7 +6,7 @@ import os
 import sys
 
 # Import the app
-from app import app, load_model
+from app_manual import app, load_model
 
 if __name__ == '__main__':
     # Load the model

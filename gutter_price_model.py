@@ -43,10 +43,14 @@ class GutterPricePredictor:
             'average home value in zip code': 'Average Home value in Zip code',
         }
         
-        # Apply mappings
+        # Apply mappings - CRITICAL FIX: Drop target column if it exists
         for old_name, new_name in mappings.items():
             if old_name in df.columns:
-                df.rename(columns={old_name: new_name}, inplace=True)
+                # If target column already exists, drop the old column instead of renaming
+                if new_name in df.columns and new_name != old_name:
+                    df = df.drop(columns=[old_name])
+                else:
+                    df.rename(columns={old_name: new_name}, inplace=True)
                 self.column_mapping[old_name] = new_name
         
         return df
@@ -91,11 +95,55 @@ class GutterPricePredictor:
         
         # Handle categorical variables
         if 'Roof Type' in df_processed.columns:
+            # Replace N/A and empty values with 'Unknown'
+            df_processed['Roof Type'] = df_processed['Roof Type'].fillna('Unknown')
+            df_processed['Roof Type'] = df_processed['Roof Type'].replace(['N/A', 'NA', 'n/a', 'na', ''], 'Unknown')
+            
             if 'Roof Type' not in self.label_encoders:
                 self.label_encoders['Roof Type'] = LabelEncoder()
-                df_processed['Roof Type Encoded'] = self.label_encoders['Roof Type'].fit_transform(df_processed['Roof Type'].astype(str))
-            else:
-                df_processed['Roof Type Encoded'] = self.label_encoders['Roof Type'].transform(df_processed['Roof Type'].astype(str))
+                # Get all unique values and ensure 'Unknown' is included
+                unique_values = df_processed['Roof Type'].unique().tolist()
+                if 'Unknown' not in unique_values:
+                    unique_values.append('Unknown')
+                # Fit with all possible values
+                self.label_encoders['Roof Type'].fit(unique_values)
+            
+            # Transform, handling unseen labels by mapping to 'Unknown'
+            try:
+                df_processed['Roof Type Encoded'] = self.label_encoders['Roof Type'].transform(
+                    df_processed['Roof Type'].astype(str)
+                )
+            except ValueError:
+                # Map unseen values to 'Unknown'
+                df_processed['Roof Type'] = df_processed['Roof Type'].apply(
+                    lambda x: x if x in self.label_encoders['Roof Type'].classes_ else 'Unknown'
+                )
+                df_processed['Roof Type Encoded'] = self.label_encoders['Roof Type'].transform(
+                    df_processed['Roof Type'].astype(str)
+                )
+        elif 'Roof Type/ Material' in df_processed.columns:
+            # Handle the alternate column name
+            df_processed['Roof Type/ Material'] = df_processed['Roof Type/ Material'].fillna('Unknown')
+            df_processed['Roof Type/ Material'] = df_processed['Roof Type/ Material'].replace(['N/A', 'NA', 'n/a', 'na', ''], 'Unknown')
+            
+            if 'Roof Type/ Material' not in self.label_encoders:
+                self.label_encoders['Roof Type/ Material'] = LabelEncoder()
+                unique_values = df_processed['Roof Type/ Material'].unique().tolist()
+                if 'Unknown' not in unique_values:
+                    unique_values.append('Unknown')
+                self.label_encoders['Roof Type/ Material'].fit(unique_values)
+            
+            try:
+                df_processed['Roof Type Encoded'] = self.label_encoders['Roof Type/ Material'].transform(
+                    df_processed['Roof Type/ Material'].astype(str)
+                )
+            except ValueError:
+                df_processed['Roof Type/ Material'] = df_processed['Roof Type/ Material'].apply(
+                    lambda x: x if x in self.label_encoders['Roof Type/ Material'].classes_ else 'Unknown'
+                )
+                df_processed['Roof Type Encoded'] = self.label_encoders['Roof Type/ Material'].transform(
+                    df_processed['Roof Type/ Material'].astype(str)
+                )
         
         # Extract numeric values from steepness using the new parser
         if 'Roof Details >> Roof: >> Steepness' in df_processed.columns:
@@ -174,8 +222,13 @@ class GutterPricePredictor:
             feature_columns.append('Home Square Footage')
         if 'Home Value' in df_processed.columns:
             feature_columns.append('Home Value')
-        if 'Average Home value in Zip code' in df_processed.columns:
+        
+        # Add ONLY ONE version of Average Home Value (check both variations)
+        if 'Average Home Value in Zip code' in df_processed.columns:
+            feature_columns.append('Average Home Value in Zip code')
+        elif 'Average Home value in Zip code' in df_processed.columns:
             feature_columns.append('Average Home value in Zip code')
+        
         if 'Number of Stories' in df_processed.columns:
             feature_columns.append('Number of Stories')
             
@@ -200,8 +253,15 @@ class GutterPricePredictor:
                 feature_columns.append(col)
         
         # Keep only available columns and fill any remaining NaN values
-        available_features = [col for col in feature_columns if col in df_processed.columns]
-        result_df = df_processed[available_features].fillna(0)
+        # CRITICAL: Remove duplicates while preserving order
+        seen = set()
+        unique_features = []
+        for col in feature_columns:
+            if col not in seen and col in df_processed.columns:
+                seen.add(col)
+                unique_features.append(col)
+        
+        result_df = df_processed[unique_features].fillna(0)
         
         return result_df
     

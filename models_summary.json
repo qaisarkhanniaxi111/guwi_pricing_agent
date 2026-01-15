@@ -3,65 +3,68 @@
     "service": "gutter_clearing",
     "description": "Gutter Clearing Service",
     "model_file": "gutter_price_model.pkl",
-    "best_model": "XGBoost",
-    "training_samples": 5099,
-    "mae": 33.55539321899414,
-    "rmse": 50.88119011788639,
-    "r2": 0.6542277336120605,
-    "cv_mae": 34.73844833374024,
+    "best_model": "Random Forest",
+    "training_samples": 5199,
+    "features_used": 10,
+    "mae": 42.83945310731536,
+    "rmse": 62.13471558144527,
+    "r2": 0.3818228460251315,
+    "cv_mae": 44.48803173152565,
     "price_range": {
       "min": 205.0,
       "max": 1525.0,
-      "mean": 316.1496371837615
+      "mean": 316.43873821888826
     }
   },
   {
     "service": "chemical_spray",
     "description": "Chemical Spray Service",
     "model_file": "chemical_spray_model.pkl",
-    "best_model": "Random Forest",
-    "training_samples": 4199,
-    "mae": 16.002713429871267,
-    "rmse": 26.629158818124097,
-    "r2": 0.5009668398848882,
-    "cv_mae": 16.537995233342883,
+    "best_model": "Extra Trees",
+    "training_samples": 4149,
+    "features_used": 10,
+    "mae": 18.19838533386371,
+    "rmse": 25.974897411879507,
+    "r2": 0.2634412178653228,
+    "cv_mae": 19.852415085517336,
     "price_range": {
       "min": 100.0,
       "max": 825.0,
-      "mean": 185.52750654917838
+      "mean": 185.62641600385635
     }
   },
   {
     "service": "zinc_treatment",
     "description": "Zinc Treatment Service",
     "model_file": "zinc_treatment_model.pkl",
-    "best_model": "Extra Trees",
+    "best_model": "SVR",
     "training_samples": 4199,
-    "mae": 15.277380825321801,
-    "rmse": 23.81349745583437,
-    "r2": 0.430821286682993,
-    "cv_mae": 15.916169305192616,
+    "features_used": 10,
+    "mae": 17.934029323510792,
+    "rmse": 26.23462568212074,
+    "r2": 0.31662325651136336,
+    "cv_mae": 18.641081107863645,
     "price_range": {
       "min": 100.0,
       "max": 590.0,
-      "mean": 165.65944272445822
+      "mean": 165.71135984758277
     }
   },
   {
     "service": "exterior_window",
     "description": "Exterior Window Cleaning Service",
     "model_file": "exterior_window_model.pkl",
-    "best_model": "XGBoost",
-    "training_samples": 5299,
-    "features_used": 13,
-    "mae": 49.52440643310547,
-    "rmse": 73.3344090238341,
-    "r2": 0.7768430113792419,
-    "cv_mae": 58.00046997070312,
+    "best_model": "Extra Trees",
+    "training_samples": 5199,
+    "features_used": 10,
+    "mae": 63.46044568873793,
+    "rmse": 135.12065891228772,
+    "r2": 0.4026255101068381,
+    "cv_mae": 62.87934259282152,
     "price_range": {
       "min": 20.0,
       "max": 3265.0,
-      "mean": 323.76335157576904
+      "mean": 324.7934218118869
     }
   },
   {
@@ -69,15 +72,16 @@
     "description": "Interior Window Cleaning Service",
     "model_file": "interior_window_model.pkl",
     "best_model": "Extra Trees",
-    "training_samples": 4799,
-    "mae": 41.49923159378626,
-    "rmse": 65.91152318741028,
-    "r2": 0.6575220485141899,
-    "cv_mae": 42.802074098562976,
+    "training_samples": 4649,
+    "features_used": 10,
+    "mae": 46.338148401057325,
+    "rmse": 79.88182219425855,
+    "r2": 0.5582875605334074,
+    "cv_mae": 48.7858021481491,
     "price_range": {
       "min": 20.0,
       "max": 2040.0,
-      "mean": 243.5148989372786
+      "mean": 244.0838890083889
     }
   }
 ]

@@ -7,7 +7,6 @@ Exterior Window Cleaning, Interior Window Cleaning
 import pandas as pd
 import numpy as np
 from gutter_price_model import GutterPricePredictor
-from flexible_trainer import FlexibleServicePredictor, train_service_model_flexible
 import os
 import json
 
@@ -38,16 +37,7 @@ SERVICES = {
         'csv_file': 'exteriorwindowtrain.csv',
         'price_column': 'Exterior Window Cleaning',
         'model_file': 'exterior_window_model.pkl',
-        'description': 'Exterior Window Cleaning Service',
-        'required_columns': [
-            'Address', 'City', 'State', 'Zip',
-            'Home Square Footage', 'Home Value', 
-            'Average Home Value in Zip code', 'Number of Stories',
-            'Jobsite Ladders >>Gutter>>Number of Ladder Movements',
-            'Jobsite Ladders >> Gutter >> ladder Size',
-            'Jobsite Ladders >> Window >> Number of Ladder Movements',
-            'Jobsite Ladders >> Window >> ladder Size'
-        ]
+        'description': 'Exterior Window Cleaning Service'
     },
     'interior_window': {
         'csv_file': 'interiorwindowtrain.csv',
@@ -94,35 +84,99 @@ def train_service_model(service_name, config):
                 df = pd.read_csv(csv_file, encoding='latin-1')
                 print(f"   ✅ Loaded {len(df)} records (Latin-1 encoding)")
         
+        # CRITICAL FIX: Check for duplicate roof type columns
+        roof_type_cols = [col for col in df.columns if 'Roof' in col and 'Type' in col and 'Details' not in col]
+        if len(roof_type_cols) > 1:
+            print(f"   ⚠️  Found multiple roof type columns: {roof_type_cols}")
+            print(f"   → Keeping 'Roof Type/ Material' and removing others")
+            # Keep 'Roof Type/ Material' if it exists, otherwise keep the first one
+            if 'Roof Type/ Material' in roof_type_cols:
+                keep_col = 'Roof Type/ Material'
+            elif 'Roof Type' in roof_type_cols:
+                keep_col = 'Roof Type'
+            else:
+                keep_col = roof_type_cols[0]
+            
+            # Remove other roof type columns
+            for col in roof_type_cols:
+                if col != keep_col:
+                    df = df.drop(columns=[col])
+                    print(f"   ✅ Removed duplicate column: {col}")
+        
         # Check if price column exists
         if price_column not in df.columns:
             print(f"   ❌ ERROR: Column '{price_column}' not found!")
             print(f"   Available columns: {df.columns.tolist()}")
             return None
         
+        # Detect column configuration
+        print(f"\n2. Analyzing column configuration...")
+        has_roof_type = 'Roof Type/ Material' in df.columns or 'Roof Type' in df.columns
+        has_square_footage = 'Home Square Footage' in df.columns
+        has_home_value = 'Home Value' in df.columns
+        has_avg_value = 'Average Home Value in Zip code' in df.columns or 'Average Home value in Zip code' in df.columns
+        has_stories = 'Number of Stories' in df.columns
+        has_steepness = 'Roof Details >> Roof: >> Steepness' in df.columns
+        has_ladder_cols = any('Ladder' in col for col in df.columns)
+        
+        # Core columns check
+        core_count = sum([has_roof_type, has_square_footage, has_home_value, has_avg_value, has_stories])
+        print(f"   📊 Core columns present: {core_count}/5")
+        
+        if core_count == 5:
+            print(f"   ✅ All 5 core columns found")
+        else:
+            missing = []
+            if not has_roof_type: missing.append('Roof Type')
+            if not has_square_footage: missing.append('Home Square Footage')
+            if not has_home_value: missing.append('Home Value')
+            if not has_avg_value: missing.append('Average Home Value in Zip code')
+            if not has_stories: missing.append('Number of Stories')
+            print(f"   ⚠️  Missing: {', '.join(missing)}")
+        
+        # Optional columns check
+        optional_count = sum([has_steepness, has_ladder_cols])
+        if optional_count > 0:
+            print(f"   ℹ️  Optional columns: Steepness={has_steepness}, Ladder info={has_ladder_cols}")
+            print(f"   → Training with STANDARD feature set ({core_count + optional_count*5}+ features)")
+        else:
+            print(f"   ℹ️  No steepness or ladder columns found")
+            print(f"   → Training with MINIMAL feature set (~8 features)")
+        
         # Rename price column to standard name for model
         df_renamed = df.copy()
         df_renamed['Gutter Clearing'] = df_renamed[price_column]
         
-        # If service has specific required columns, keep only those
-        required_cols = config.get('required_columns', None)
-        if required_cols is not None:
-            print(f"   ℹ️  Service uses custom column set ({len(required_cols)} columns)")
+        # CRITICAL FIX: Handle N/A roof types
+        roof_col = None
+        if 'Roof Type' in df_renamed.columns:
+            roof_col = 'Roof Type'
+        elif 'Roof Type/ Material' in df_renamed.columns:
+            roof_col = 'Roof Type/ Material'
+        
+        if roof_col:
+            # Replace missing/empty with 'Unknown'
+            df_renamed[roof_col] = df_renamed[roof_col].fillna('Unknown')
+            df_renamed[roof_col] = df_renamed[roof_col].replace(['', 'nan', 'NaN'], 'Unknown')
             
-            # Keep only the required columns that exist
-            available_required = [col for col in required_cols if col in df_renamed.columns]
-            missing_required = [col for col in required_cols if col not in df_renamed.columns]
+            # Ensure we have some N/A values in training (5% minimum)
+            na_count = (df_renamed[roof_col] == 'N/A').sum()
+            if na_count < len(df_renamed) * 0.05:
+                # Convert 5% of 'Unknown' to 'N/A' to ensure model sees it
+                unknown_indices = df_renamed[df_renamed[roof_col] == 'Unknown'].index
+                if len(unknown_indices) > 0:
+                    num_to_convert = max(int(len(df_renamed) * 0.05), 10)
+                    convert_indices = np.random.choice(unknown_indices, 
+                                                      size=min(num_to_convert, len(unknown_indices)), 
+                                                      replace=False)
+                    df_renamed.loc[convert_indices, roof_col] = 'N/A'
+                    print(f"   ✅ Added {len(convert_indices)} 'N/A' roof types for robust handling")
             
-            if missing_required:
-                print(f"   ⚠️  Some required columns missing: {missing_required}")
-            
-            # Keep required columns + the price column
-            columns_to_keep = available_required + ['Gutter Clearing']
-            df_renamed = df_renamed[columns_to_keep]
-            
-            print(f"   ✅ Using {len(available_required)} feature columns")
-        else:
-            print(f"   ℹ️  Service uses all available columns")
+            # Show roof type distribution
+            print(f"\n   📊 Roof Type Distribution:")
+            roof_counts = df_renamed[roof_col].value_counts()
+            for roof_type, count in roof_counts.head(10).items():
+                print(f"      {roof_type:<20} {count:>6} ({count/len(df_renamed)*100:.1f}%)")
         
         # Remove rows with missing prices
         initial_count = len(df_renamed)
@@ -139,7 +193,7 @@ def train_service_model(service_name, config):
         
         # Price statistics
         prices = df_renamed['Gutter Clearing']
-        print(f"\n2. Price Statistics for {config['description']}:")
+        print(f"\n3. Price Statistics for {config['description']}:")
         print(f"   Min:    ${prices.min():.2f}")
         print(f"   Max:    ${prices.max():.2f}")
         print(f"   Mean:   ${prices.mean():.2f}")
@@ -147,12 +201,18 @@ def train_service_model(service_name, config):
         print(f"   Std:    ${prices.std():.2f}")
         
         # Train model
-        print(f"\n3. Training model...")
+        print(f"\n4. Training model...")
         predictor = GutterPricePredictor()
         predictor.fit(df_renamed)
         
+        # Show features used
+        print(f"   ✅ Model trained with {len(predictor.feature_names)} features")
+        print(f"\n   📋 Features used in model:")
+        for i, feat in enumerate(predictor.feature_names, 1):
+            print(f"      {i:2}. {feat}")
+        
         # Save model
-        print(f"\n4. Saving model to {model_file}...")
+        print(f"\n5. Saving model to {model_file}...")
         predictor.save_model(model_file)
         
         # Get best model metrics
@@ -164,6 +224,7 @@ def train_service_model(service_name, config):
             'model_file': model_file,
             'best_model': predictor.best_model_name,
             'training_samples': len(df_renamed),
+            'features_used': len(predictor.feature_names),
             'mae': best_metrics.get('MAE', 0),
             'rmse': best_metrics.get('RMSE', 0),
             'r2': best_metrics.get('R2', 0),
@@ -207,12 +268,7 @@ def train_all_services():
     failed = 0
     
     for service_name, config in SERVICES.items():
-        # Use flexible trainer for services with custom columns
-        if config.get('required_columns') is not None:
-            print(f"\n[Using Flexible Trainer for {service_name}]")
-            result = train_service_model_flexible(service_name, config)
-        else:
-            result = train_service_model(service_name, config)
+        result = train_service_model(service_name, config)
         
         if result:
             results.append(result)
@@ -230,16 +286,16 @@ def train_all_services():
     
     if results:
         print("\nTrained Models:")
-        print("-" * 80)
-        print(f"{'Service':<30} {'Model':<20} {'MAE':<12} {'R²':<10} {'Samples':<10}")
-        print("-" * 80)
+        print("-" * 90)
+        print(f"{'Service':<30} {'Model':<20} {'MAE':<12} {'R²':<10} {'Features':<10}")
+        print("-" * 90)
         
         for result in results:
             print(f"{result['description']:<30} "
                   f"{result['best_model']:<20} "
                   f"${result['mae']:<11.2f} "
                   f"{result['r2']:<10.4f} "
-                  f"{result['training_samples']:<10}")
+                  f"{result.get('features_used', 'N/A'):<10}")
     
     # Save summary to JSON
     if results:
