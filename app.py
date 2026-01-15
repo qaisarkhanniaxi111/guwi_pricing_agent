@@ -263,6 +263,7 @@ def home():
             '/': 'API information',
             '/health': 'Health check',
             '/debug': 'Debug - Check files and model status',
+            '/reload_models': 'Manually reload all models (POST)',
             '/services': 'List available services',
             '/predict/<service>': 'Predict price for a service (POST)',
             '/predict_all': 'Get prices for all services (POST)',
@@ -285,7 +286,45 @@ def health_check():
     })
 
 
-@app.route('/debug', methods=['GET'])
+@app.route('/reload_models', methods=['POST'])
+def reload_models():
+    """Manually reload all models"""
+    logger.info("Manual model reload triggered")
+    
+    results = {}
+    for service_name, config in SERVICES.items():
+        model_file = config['model_file']
+        
+        if os.path.exists(model_file):
+            try:
+                logger.info(f"Loading {model_file}...")
+                predictor = GutterPricePredictor()
+                predictor.load_model(model_file)
+                config['model'] = predictor
+                results[service_name] = {
+                    'status': 'success',
+                    'model_type': predictor.best_model_name if hasattr(predictor, 'best_model_name') else 'Unknown'
+                }
+                logger.info(f"✅ Loaded {service_name}")
+            except Exception as e:
+                results[service_name] = {
+                    'status': 'error',
+                    'error': str(e)
+                }
+                logger.error(f"❌ Failed {service_name}: {e}")
+        else:
+            results[service_name] = {
+                'status': 'error',
+                'error': 'File not found'
+            }
+    
+    loaded_count = sum(1 for config in SERVICES.values() if config['model'] is not None)
+    
+    return jsonify({
+        'message': 'Model reload attempted',
+        'loaded': f"{loaded_count}/{len(SERVICES)}",
+        'results': results
+    })
 def debug():
     """Debug endpoint to check files and configuration"""
     import os
