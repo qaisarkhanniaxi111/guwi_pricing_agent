@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # RapidAPI configuration for property data
-RAPIDAPI_KEY = 'edb85c1e18msh5a90a5d85106214p1f8f6djsn3cbe051d609f'
+RAPIDAPI_KEY = '15e33ec1camsh450e127907030c3p1b62b3jsn8a9327ebe07f'
 
 # Service configurations
 SERVICES = {
