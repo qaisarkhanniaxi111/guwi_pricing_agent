@@ -835,6 +835,10 @@ def internal_error(error):
     return jsonify({'error': 'Internal server error'}), 500
 
 
+# Load models at import time so Gunicorn workers pick them up
+load_all_models()
+
+
 if __name__ == '__main__':
     print("\n" + "="*70)
     print("Multi-Service Price Prediction API - Starting...")
@@ -861,17 +865,11 @@ if __name__ == '__main__':
         print("\nThe API will start but some services won't work.")
         print("Upload .pkl files to enable all services.\n")
     
-    # Load all models on startup
-    loaded = load_all_models()
-    
-    if loaded == 0:
-        logger.warning("No models loaded! API will run but predictions won't work.")
-        print("\n⚠️  No models loaded! Upload .pkl files to enable predictions.")
-    
     # Get port from environment
     port = int(os.environ.get('PORT', 8080))
     debug_mode = os.environ.get('FLASK_ENV', 'production') != 'production'
-    
+
+    loaded = sum(1 for config in SERVICES.values() if config['model'] is not None)
     print(f"\nLoaded {loaded}/{len(SERVICES)} models")
     print(f"Starting on port {port}")
     print(f"Using MINIMAL 5-column approach")
